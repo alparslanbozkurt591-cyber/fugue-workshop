@@ -895,7 +895,9 @@ function updatePos(beat){
 /* ============================== audio ============================== */
 let actx=null, waves={};
 function ensureAudio(){
-  if(!actx){actx=new (window.AudioContext||window.webkitAudioContext)();
+  if(!actx){
+    try{ if(navigator.audioSession) navigator.audioSession.type='playback' }catch(e){}
+    actx=new (window.AudioContext||window.webkitAudioContext)();
     const mk=h=>{const re=new Float32Array(h.length+1),im=new Float32Array(h.length+1);h.forEach((x,i)=>im[i+1]=x);return actx.createPeriodicWave(re,im)};
     waves.organ=mk([1,0.55,0.35,0.22,0.12,0.08,0.05,0.03]);
     waves.harpsi=mk([1,0.8,0.6,0.5,0.42,0.35,0.3,0.25,0.2,0.16,0.12,0.1]);
@@ -907,13 +909,16 @@ function play(fromBeat=0){
   stop();
   const c=ensureAudio(); c.resume();
   const bpm=+$('#tempo').value, spb=60/bpm, sound=$('#sound').value;
-  const master=c.createGain(); master.gain.value=0.16/Math.sqrt(F.n/3); master.connect(c.destination);
-  const comp=c.createDynamicsCompressor(); comp.connect(master);
+  const master=c.createGain(); master.gain.value=1.05; master.connect(c.destination);
+  const comp=c.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.knee.value=8; comp.ratio.value=4; comp.attack.value=0.005; comp.release.value=0.2;
+  const pre=c.createGain(); pre.gain.value=0.55/Math.sqrt(F.n/3);
+  pre.connect(comp); comp.connect(master);
   const t0=c.currentTime+0.12-fromBeat*spb;
   const pans=F.n===3?[-0.35,0.35,0]:[-0.45,0.15,-0.15,0.45];
   F.voices.forEach((notes,v)=>{
     const pan=c.createStereoPanner?c.createStereoPanner():null; const vg=c.createGain(); vg.gain.value=v===F.n-1?1.05:0.9;
-    if(pan){pan.pan.value=pans[v];vg.connect(pan);pan.connect(comp)} else vg.connect(comp);
+    if(pan){pan.pan.value=pans[v];vg.connect(pan);pan.connect(pre)} else vg.connect(pre);
     for(const n of notes){
       if(n.s+n.d<=fromBeat) continue;
       const st=Math.max(c.currentTime+0.05,t0+n.s*spb), en=t0+(n.s+n.d)*spb, dur=Math.max(0.05,en-st);
